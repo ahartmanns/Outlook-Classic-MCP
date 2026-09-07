@@ -136,12 +136,31 @@ def create_event(
     attendees: list[str] | None = None,
     is_online_meeting: bool = False,
     reminder_minutes: int | None = 15,
+    all_day: bool = False,
     recurrence: Recurrence | None = None,
 ) -> dict[str, Any]:
     appt = outlook.CreateItem(OL_APPOINTMENT_ITEM)
     appt.Subject = subject
-    appt.Start = from_iso(start)
-    appt.End = from_iso(end)
+    start_dt = from_iso(start)
+    end_dt = from_iso(end)
+    if all_day:
+        # Outlook only accepts AllDayEvent for a whole number of days
+        # starting at midnight. Normalise here so a caller passing
+        # "2026-09-10" (or a same-day end) gets one full day rather
+        # than a COM error. End is exclusive, as in Outlook itself.
+        start_dt = start_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+        midnight = end_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+        # A midnight end is exclusive (Outlook's own convention). A timed
+        # end means "through that day", so round it up instead of
+        # silently dropping the final day.
+        end_dt = midnight if end_dt == midnight else midnight + dt.timedelta(days=1)
+        if end_dt <= start_dt:
+            end_dt = start_dt + dt.timedelta(days=1)
+    appt.Start = start_dt
+    appt.End = end_dt
+    if all_day:
+        # Set after Start/End: Outlook re-snaps the span on assignment.
+        appt.AllDayEvent = True
     if location:
         appt.Location = location
     if body:

@@ -88,6 +88,16 @@ def register(mcp, bridge) -> None:
         ] = None,
         is_online_meeting: Annotated[bool, Field()] = False,
         reminder_minutes: Annotated[Optional[int], Field(ge=0, le=10080)] = 15,
+        all_day: Annotated[
+            bool,
+            Field(
+                description=(
+                    "Create an all-day event. Start/end are snapped to midnight "
+                    "and end is exclusive, so a single day is start='2026-09-10' "
+                    "with end='2026-09-11' (a same-day end also works)."
+                )
+            ),
+        ] = False,
         recurrence: Annotated[
             Optional[Recurrence],
             Field(description="Recurrence pattern. Omit for a single occurrence."),
@@ -104,6 +114,7 @@ def register(mcp, bridge) -> None:
             attendees=attendees,
             is_online_meeting=is_online_meeting,
             reminder_minutes=reminder_minutes,
+            all_day=all_day,
             recurrence=recurrence,
         )
         return format_response(data, "json")
