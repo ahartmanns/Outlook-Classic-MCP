@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import logging
 from typing import Any
 
 from outlook_mcp.client.folders import _safe_get, get_item_by_id
@@ -23,6 +24,8 @@ from outlook_mcp.errors import OutlookError
 from outlook_mcp.schemas import Recurrence
 from outlook_mcp.utils.formatting import from_iso, to_iso, truncate
 
+logger = logging.getLogger("outlook_mcp.client.calendar")
+
 
 _RECURRENCE_TYPE_MAP = {
     "daily": OL_RECURS_DAILY,
@@ -30,6 +33,18 @@ _RECURRENCE_TYPE_MAP = {
     "monthly": OL_RECURS_MONTHLY,
     "yearly": OL_RECURS_YEARLY,
 }
+
+
+def _naive_start(ev: Any) -> dt.datetime | None:
+    """Event start as a naive local datetime, comparable to from_iso().
+
+    pywin32 hands back Outlook's local wall-clock time with a bogus UTC
+    tzinfo attached (see to_iso); dropping it leaves the wall clock.
+    """
+    raw = _safe_get(ev, "Start", None)
+    if isinstance(raw, dt.datetime):
+        return raw.replace(tzinfo=None)
+    return None
 
 
 def _event_summary(ev: Any) -> dict[str, Any]:
@@ -98,16 +113,39 @@ def list_events(
     start_dt = from_iso(start) or dt.datetime.now()
     end_dt = from_iso(end) or (start_dt + dt.timedelta(days=14))
 
-    # Jet filter dates must be 12-hour + AM/PM; %H with %p would emit
-    # e.g. "14:30 PM", which Outlook misparses for afternoon times.
+    # DASL, not the Jet "[Start] >= '...'" syntax. Jet parses the date
+    # literal with the machine's Windows locale, so the US-formatted
+    # 09/07/2026 this code used to emit is read as 9 July on a de-DE
+    # box. It only misfires when the day of month is <= 12: a day > 12
+    # makes the locale's own order invalid and Outlook falls back to
+    # month-first, which is why the bug looks intermittent. It also
+    # fails silently and *widens* the window rather than erroring.
+    # DASL date literals are ISO and locale-independent.
     restrict = (
-        f"[Start] >= '{start_dt.strftime('%m/%d/%Y %I:%M %p')}' AND "
-        f"[Start] <= '{end_dt.strftime('%m/%d/%Y %I:%M %p')}'"
+        f"@SQL=\"urn:schemas:calendar:dtstart\" >= '{start_dt.strftime('%Y-%m-%d %H:%M')}' AND "
+        f"\"urn:schemas:calendar:dtstart\" <= '{end_dt.strftime('%Y-%m-%d %H:%M')}'"
     )
-    filtered = items.Restrict(restrict)
+    try:
+        filtered = items.Restrict(restrict)
+    except Exception:  # noqa: BLE001
+        # Restrict only bounds how far the recurrence expansion runs;
+        # the loop below is what decides the result, so an unusable
+        # filter costs speed, not correctness.
+        logger.warning("Calendar Restrict failed, scanning unfiltered", exc_info=True)
+        filtered = items
 
     results: list[dict[str, Any]] = []
     for ev in filtered:
+        # The collection is sorted ascending by [Start], so this both
+        # enforces the window exactly and terminates the scan. The
+        # termination matters: with IncludeRecurrences an open-ended
+        # series enumerates forever if the filter did not bound it.
+        ev_start = _naive_start(ev)
+        if ev_start is not None:
+            if ev_start > end_dt:
+                break
+            if ev_start < start_dt:
+                continue
         results.append(_event_summary(ev))
         if len(results) >= limit:
             break
