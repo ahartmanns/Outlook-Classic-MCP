@@ -22,7 +22,7 @@ from outlook_mcp.constants import (
 )
 from outlook_mcp.errors import OutlookError
 from outlook_mcp.schemas import Recurrence
-from outlook_mcp.utils.formatting import from_iso, to_iso, truncate
+from outlook_mcp.utils.formatting import from_iso, to_com, to_iso, truncate
 
 logger = logging.getLogger("outlook_mcp.client.calendar")
 
@@ -90,7 +90,7 @@ def _apply_recurrence(appt: Any, spec: Recurrence) -> None:
     if spec.occurrences is not None:
         pattern.Occurrences = spec.occurrences
     if spec.end_date is not None:
-        pattern.PatternEndDate = from_iso(spec.end_date)
+        pattern.PatternEndDate = to_com(from_iso(spec.end_date))
 
 
 def list_events(
@@ -194,8 +194,12 @@ def create_event(
         end_dt = midnight if end_dt == midnight else midnight + dt.timedelta(days=1)
         if end_dt <= start_dt:
             end_dt = start_dt + dt.timedelta(days=1)
-    appt.Start = start_dt
-    appt.End = end_dt
+    # to_com, not the bare datetime: pywin32 would read a naive value
+    # as local and hand Outlook its UTC clock, shifting the event one
+    # offset early. Must stay above the AllDayEvent assignment, which
+    # re-snaps whatever span it finds.
+    appt.Start = to_com(start_dt)
+    appt.End = to_com(end_dt)
     if all_day:
         # Set after Start/End: Outlook re-snaps the span on assignment.
         appt.AllDayEvent = True
@@ -241,9 +245,9 @@ def update_event(
     if subject is not None:
         ev.Subject = subject
     if start is not None:
-        ev.Start = from_iso(start)
+        ev.Start = to_com(from_iso(start))
     if end is not None:
-        ev.End = from_iso(end)
+        ev.End = to_com(from_iso(end))
     if location is not None:
         ev.Location = location
     if body is not None:
