@@ -56,6 +56,12 @@ The client code passes the string through verbatim rather than joining a list, w
 5. **Address book group** not enabled yet.
 6. **`response_format` had no visible effect** on `list_events` through the Claude desktop bridge: asking for markdown still returned the structured JSON. `list_events` and `get_event` wrap their output in `ui_result`, which attaches structured content, and that client appears to render the structured content instead of the markdown text. Not investigated, and it may look different in Claude Code. Not obviously a server bug.
 
+7. **`create_event` forces a 15-minute reminder, ignoring your Outlook settings.** `reminder_minutes` defaults to `15` in `tools/calendar.py`, and the client sets `ReminderSet = True` whenever it is not None, so every event created through the MCP gets a reminder. Outlook's "Default reminders" checkbox is unchecked on this machine but has no bearing on it: that setting governs appointments Outlook creates in its own UI, not a property written directly through COM. Passing `0` does not disable it either, since `0` is not None and means "remind at start time".
+
+   The fix is to default the parameter to `None`. The None branch already leaves `ReminderSet` untouched, which lets Outlook's own behaviour stand, so it is a one-word change plus a docstring. Worth deciding at the same time whether `0` should keep meaning "at start time" or become the way to say "no reminder"; keeping `0` as-is and letting None mean "don't touch" is the cleaner split.
+
+   Events already created this way keep their reminders, and `update_event` has no reminder argument, so clearing them means doing it in Outlook or adding one.
+
 ## Known non-bugs
 
 `outlook_whoami` returns `current_user: "Unknown"` with an empty accounts list, and most events report `organizer: "Unknown"`. Expected for a PST-only profile, not a connection failure.
