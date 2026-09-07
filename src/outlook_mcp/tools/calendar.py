@@ -102,6 +102,18 @@ def register(mcp, bridge) -> None:
             Optional[Recurrence],
             Field(description="Recurrence pattern. Omit for a single occurrence."),
         ] = None,
+        categories: Annotated[
+            Optional[str],
+            Field(
+                description=(
+                    "Category names exactly as Outlook has them, e.g. "
+                    "'Privat'. Several names are separated by the list "
+                    "separator of your Windows locale; "
+                    "outlook_list_categories shows the available names. "
+                    "Empty string clears all categories."
+                )
+            ),
+        ] = None,
     ) -> str:
         """Create a calendar event or meeting invite."""
         data = await bridge.call(
@@ -116,6 +128,7 @@ def register(mcp, bridge) -> None:
             reminder_minutes=reminder_minutes,
             all_day=all_day,
             recurrence=recurrence,
+            categories=categories,
         )
         return format_response(data, "json")
 
@@ -137,6 +150,18 @@ def register(mcp, bridge) -> None:
         end: Annotated[Optional[str], Field()] = None,
         location: Annotated[Optional[str], Field()] = None,
         body: Annotated[Optional[str], Field()] = None,
+        categories: Annotated[
+            Optional[str],
+            Field(
+                description=(
+                    "Category names exactly as Outlook has them, e.g. "
+                    "'Privat'. Several names are separated by the list "
+                    "separator of your Windows locale; "
+                    "outlook_list_categories shows the available names. "
+                    "Empty string clears all categories."
+                )
+            ),
+        ] = None,
     ) -> str:
         """Update fields on an existing event. Only non-null fields are written."""
         data = await bridge.call(
@@ -147,6 +172,7 @@ def register(mcp, bridge) -> None:
             end=end,
             location=location,
             body=body,
+            categories=categories,
         )
         return format_response(data, "json")
 

@@ -138,6 +138,8 @@ def _render_collection(data: dict[str, Any]) -> str:
                 lines.append(f"  - location: {ev['location']}")
             if ev.get("organizer"):
                 lines.append(f"  - organizer: {ev['organizer']}")
+            if ev.get("categories"):
+                lines.append(f"  - categories: {ev['categories']}")
             lines.append(f"  - id: `{ev.get('entry_id')}`")
     elif "full_name" in sample:
         for c in items:

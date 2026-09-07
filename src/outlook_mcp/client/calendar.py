@@ -58,6 +58,7 @@ def _event_summary(ev: Any) -> dict[str, Any]:
         "organizer": _safe_get(ev, "Organizer", ""),
         "is_recurring": bool(recur_state),
         "all_day": bool(_safe_get(ev, "AllDayEvent", False)),
+        "categories": _safe_get(ev, "Categories", ""),
         "preview": truncate(_safe_get(ev, "Body", ""), 200),
     }
 
@@ -79,7 +80,6 @@ def _event_full(ev: Any) -> dict[str, Any]:
         "body": _safe_get(ev, "Body", ""),
         "attendees": attendees,
         "reminder_minutes": _safe_get(ev, "ReminderMinutesBeforeStart"),
-        "categories": _safe_get(ev, "Categories", ""),
     }
 
 
@@ -176,6 +176,7 @@ def create_event(
     reminder_minutes: int | None = 15,
     all_day: bool = False,
     recurrence: Recurrence | None = None,
+    categories: str | None = None,
 ) -> dict[str, Any]:
     appt = outlook.CreateItem(OL_APPOINTMENT_ITEM)
     appt.Subject = subject
@@ -216,6 +217,11 @@ def create_event(
             rec = appt.Recipients.Add(addr)
             rec.Type = OL_TO
         appt.Recipients.ResolveAll()
+    if categories is not None:
+        # Passed through verbatim. Outlook splits this on the list
+        # separator of the machine's locale, so the caller decides the
+        # delimiter; list_categories shows the names as Outlook has them.
+        appt.Categories = categories
     if recurrence is not None:
         _apply_recurrence(appt, recurrence)
     appt.Save()
@@ -227,6 +233,7 @@ def create_event(
         "subject": appt.Subject,
         "start": to_iso(appt.Start),
         "end": to_iso(appt.End),
+        "categories": _safe_get(appt, "Categories", ""),
     }
 
 
@@ -240,6 +247,7 @@ def update_event(
     end: str | None = None,
     location: str | None = None,
     body: str | None = None,
+    categories: str | None = None,
 ) -> dict[str, Any]:
     ev = get_item_by_id(namespace, entry_id)
     if subject is not None:
@@ -252,6 +260,8 @@ def update_event(
         ev.Location = location
     if body is not None:
         ev.Body = body
+    if categories is not None:
+        ev.Categories = categories
     ev.Save()
     return {"status": "updated", "entry_id": entry_id}
 
