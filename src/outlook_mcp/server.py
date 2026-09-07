@@ -5,14 +5,15 @@ from __future__ import annotations
 from mcp.server.fastmcp import FastMCP
 
 from outlook_mcp.bridge import OutlookBridge
-from outlook_mcp.tools import register_all
+from outlook_mcp.tools import enabled_tool_docs, register_all
 from outlook_mcp.ui import register_ui
 
-INSTRUCTIONS = """\
-This MCP server gives you full access to Microsoft Outlook desktop on
-Windows via COM automation. It can read and send mail, manage calendar
-events, contacts, tasks, color categories, mail rules, and check
-Out-of-Office status.
+INSTRUCTIONS_TEMPLATE = """\
+This MCP server gives you access to Microsoft Outlook desktop on
+Windows via COM automation. The tool groups registered in this session
+are listed below; anything not listed is switched off and unavailable,
+so do not offer it. In particular, mail tools are absent unless the
+Mail category appears below.
 
 Authentication piggybacks on whatever account Outlook is signed into —
 no Microsoft Graph API, no Entra app registration, no OAuth tokens.
@@ -22,16 +23,7 @@ server auto-launches Outlook on first call; the new "modern" Outlook
 (olk.exe) is NOT supported.
 
 Tool categories (all prefixed `outlook_`):
-  - Mail: list, search, get, send, reply, forward, move, delete, mark, save_attachments
-  - Folders: list_folders, create_folder
-  - Calendar: list_events, get_event, create_event, update_event, delete_event, respond_event
-  - Contacts: list_contacts, search_contacts (incl. org directory/GAL),
-    get_contact, resolve_name (name -> SMTP address)
-  - Tasks: list_tasks, create_task, complete_task
-  - Categories: list_categories, set_category
-  - Rules: list_rules, toggle_rule  (modifies live mail rules — confirm first)
-  - Out-of-Office: get_out_of_office
-  - Account: whoami  (sanity check on the bound mailbox)
+{tool_categories}
 
 Most read tools accept response_format='markdown' (default) or 'json'.
 Item references use Outlook EntryID strings; list tools return them on
@@ -50,7 +42,8 @@ def build_server() -> tuple[FastMCP, OutlookBridge]:
     The bridge is *not* started here — entrypoint.main() does that so
     the readiness wait happens after logging is configured.
     """
-    mcp = FastMCP("outlook_mcp", instructions=INSTRUCTIONS)
+    instructions = INSTRUCTIONS_TEMPLATE.format(tool_categories=enabled_tool_docs())
+    mcp = FastMCP("outlook_mcp", instructions=instructions)
     bridge = OutlookBridge()
     register_all(mcp, bridge)
     register_ui(mcp)

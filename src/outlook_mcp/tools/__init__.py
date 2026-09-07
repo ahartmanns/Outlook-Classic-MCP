@@ -31,6 +31,24 @@ _GROUPS = {
 }
 
 
+# One line per group, mirroring the tool names each module registers.
+# Kept beside _GROUPS so the two cannot drift apart.
+_GROUP_DOCS = {
+    "mail": "Mail: list, search, get, send, reply, forward, move, delete, mark, save_attachments",
+    "folders": "Folders: list_folders, create_folder",
+    "calendar": "Calendar: list_events, get_event, create_event, update_event, delete_event, respond_event",
+    "contacts": (
+        "Contacts: list_contacts, search_contacts (incl. org directory/GAL), "
+        "get_contact, resolve_name (name -> SMTP address)"
+    ),
+    "tasks": "Tasks: list_tasks, create_task, complete_task",
+    "categories": "Categories: list_categories, set_category",
+    "rules": "Rules: list_rules, toggle_rule  (modifies live mail rules \u2014 confirm first)",
+    "ooo": "Out-of-Office: get_out_of_office",
+    "account": "Account: whoami  (sanity check on the bound mailbox)",
+}
+
+
 def _enabled_groups() -> tuple[str, ...]:
     """Tool groups to register, from OUTLOOK_MCP_TOOLS (default: all).
 
@@ -56,3 +74,10 @@ def register_all(mcp, bridge) -> None:
     logger.info("Registering tool groups: %s", ", ".join(names))
     for name in names:
         _GROUPS[name].register(mcp, bridge)
+
+
+def enabled_tool_docs() -> str:
+    """Bullet list of the tool groups actually registered, for the
+    server instructions. Without this the host is told about mail and
+    rules tools that OUTLOOK_MCP_TOOLS has switched off."""
+    return "\n".join(f"  - {_GROUP_DOCS[name]}" for name in _enabled_groups())
