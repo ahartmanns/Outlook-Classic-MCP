@@ -10,4 +10,4 @@ Standing rules that the two bugs fixed so far both came down to:
 - **Never assign a naive datetime to a COM date property.** Use `to_com` from `utils/formatting.py`. pywin32 converts what it is given to UTC and Outlook stores that clock as local wall time, so a naive value lands one UTC offset early.
 - **A code change is not live until the MCP server process restarts**, which means restarting the client that spawned it. Verify with a throwaway event: create, read back, delete.
 
-Tests are `uv run pytest`, Windows only. The venv is an editable install, so no reinstall is needed after an edit.
+Tests are `uv run --with pytest pytest`, Windows only. The venv is an editable install, so no reinstall is needed after an edit.

@@ -1,33 +1,37 @@
 # Local fork status — outlook-classic-mcp
 
-Last updated: 2026-09-07. Branch `local/calendar-only` in `C:\Code\outlook-classic-mcp`.
+Last updated: 2026-11-04. Branch `local/calendar-only` in `C:\Code\outlook-classic-mcp`, pushed to the fork https://github.com/ahartmanns/Outlook-Classic-MCP (`origin`); the original repository is the remote `upstream`.
 Setup: classic desktop Outlook, local PST file only, no online/Exchange account.
 
 **Everything below is committed, live and verified** as of the 2026-09-07 restart of Outlook and the Claude UI.
 
 ## Local commits on top of upstream
 
+Arnd wants fast-forward merges only: take upstream changes by rebasing `local/calendar-only` onto `upstream/main` (then `git push --force-with-lease`), not by merging. Commit hashes below change with every rebase; update them afterwards.
+
+On 2026-11-04 the branch was rebased onto upstream `5986a15`, which adds upstream PR #14 (re-attach when a stale proxy raises a bare `AttributeError` after an Outlook restart) and #12 (YAML front matter of the skill file). Tests pass (55); not yet verified live after the rebase.
+
 | Commit | What |
 |---|---|
-| `bb687b4` | Gate tool groups behind `OUTLOOK_MCP_TOOLS` |
-| `f39c459` | Support creating all-day events (Outlook's exclusive-end semantics handled in code) |
-| `e6ca222` | Generate server instructions from the enabled tool groups |
-| `fe1c2b9` | Fix locale-dependent date filter in `list_events` |
-| `345d9fa` | Fix timezone shift when writing dates to Outlook |
-| `35c59ca` | Surface and set categories on calendar events |
+| `34a060d` | Gate tool groups behind `OUTLOOK_MCP_TOOLS` |
+| `d195eb3` | Support creating all-day events (Outlook's exclusive-end semantics handled in code) |
+| `4f7bb81` | Generate server instructions from the enabled tool groups |
+| `196303f` | Fix locale-dependent date filter in `list_events` |
+| `ef01635` | Fix timezone shift when writing dates to Outlook |
+| `aa7ec77` | Surface and set categories on calendar events |
 
 Enabled groups: `calendar`, `categories`. Email is deliberately off (the PST has no mail, and it would collide with the Thunderbird MCP). Address book is not enabled yet and is the obvious next piece of work.
 
 ## Two locale/timezone traps, both fixed — read before touching date code
 
-**1. Date filter (`fe1c2b9`).** The old Jet restriction embedded dates as `%m/%d/%Y`, and Outlook parses that literal using the Windows locale, so `09/07/2026` was read as 9 July on this de-DE machine. It failed silently and *widened* the window, and only bit when the day of month was <= 12 (above that the day-first reading is invalid, Outlook falls back to month-first, and the query happened to be right).
+**1. Date filter (`196303f`).** The old Jet restriction embedded dates as `%m/%d/%Y`, and Outlook parses that literal using the Windows locale, so `09/07/2026` was read as 9 July on this de-DE machine. It failed silently and *widened* the window, and only bit when the day of month was <= 12 (above that the day-first reading is invalid, Outlook falls back to month-first, and the query happened to be right).
 
 Now: DASL against `urn:schemas:calendar:dtstart` with ISO literals, which are not locale-parsed, plus a result-loop filter on the parsed start so the returned set is exact whatever `Restrict` did. `Restrict` only bounds how far recurrence expansion runs, so an unusable filter is downgraded to a full scan instead of failing the call. The ascending `items.Sort("[Start]")` is what makes the loop's `break` terminate on an open-ended series with `IncludeRecurrences`.
 
 Verified: 07–09 Sep, 20–28 Sep (day > 12) and 30 Nov – 06 Dec (month and DST boundary).
 **The old "swap day and month" workaround is now wrong.** Never reintroduce it.
 
-**2. Timezone on write (`345d9fa`).** pywin32 converts whatever datetime it is handed to UTC and gives Outlook that clock, which Outlook stores as local wall time. Passing the naive local value from `from_iso` therefore stored the UTC representation, so every event landed one UTC offset early (2 h CEST, 1 h CET). All-day was worse: midnight shifted to 22:00 the previous day and `AllDayEvent = True` re-snapped the span outwards, turning one day into two starting a day early.
+**2. Timezone on write (`ef01635`).** pywin32 converts whatever datetime it is handed to UTC and gives Outlook that clock, which Outlook stores as local wall time. Passing the naive local value from `from_iso` therefore stored the UTC representation, so every event landed one UTC offset early (2 h CEST, 1 h CET). All-day was worse: midnight shifted to 22:00 the previous day and `AllDayEvent = True` re-snapped the span outwards, turning one day into two starting a day early.
 
 Now: `to_com` in `utils/formatting.py`, the exact inverse of `to_iso`. It labels the intended wall clock as UTC so pywin32's conversion is a no-op. A relabel, not arithmetic, so there is no DST edge case. Applied to appointment `Start`/`End` on create and update, `PatternEndDate`, and task `DueDate`/`ReminderTime`. Round trip covered in `tests/test_formatting.py`.
 
@@ -37,11 +41,11 @@ Verified after restart: a 14:00 request stored 14:00, and all-day `2026-10-16`..
 
 ### Do not "repair" old events
 
-Events created through the MCP before `345d9fa` went live were written with the offset. The session that created them had already spotted the bug and pre-compensated the times, so **they are correct in the calendar now**. Do not shift them.
+Events created through the MCP before `ef01635` went live were written with the offset. The session that created them had already spotted the bug and pre-compensated the times, so **they are correct in the calendar now**. Do not shift them.
 
 ## Categories
 
-Working end to end. The `categories` group (`outlook_list_categories`, `outlook_set_category`) is upstream and now enabled; `35c59ca` added the calendar-side pieces: `list_events` returns categories per event, and `create_event` / `update_event` take a `categories` argument.
+Working end to end. The `categories` group (`outlook_list_categories`, `outlook_set_category`) is upstream and now enabled; `aa7ec77` added the calendar-side pieces: `list_events` returns categories per event, and `create_event` / `update_event` take a `categories` argument.
 
 Separator: **resolved, comma is fine.** Outlook here accepts both `,` and `;` on input and normalises to `", "` on output — `"Privat;Uni"` and `"Uni,Familie"` both came back joined with a comma and a space. The earlier worry that a German locale would need `;` was wrong. `set_category`'s "comma-separated" docstring is accurate; leave it. The one real ambiguity is a category name containing a comma, and none of the 14 names in this profile do.
 
@@ -67,12 +71,13 @@ The client code passes the string through verbatim rather than joining a list, w
 `outlook_whoami` returns `current_user: "Unknown"` with an empty accounts list, and most events report `organizer: "Unknown"`. Expected for a PST-only profile, not a connection failure.
 
 If both `whoami` and `list_events` fail with `AttributeError` on `Outlook.Application.Session` / `GetNamespace.GetDefaultFolder`, Outlook is not running, so there is no MAPI session. Start Outlook rather than retrying.
+Since upstream PR #14 (in the branch since 2026-11-04), the server should re-attach by itself when Outlook was restarted under it; if the error persists, Outlook is not running.
 
 ## Development
 
 The venv at `.venv` was created by `install.bat` with the package installed editable (`-e .`), so code edits take effect on the next server start with no reinstall. The server is `.venv\Scripts\python.exe -m outlook_mcp` over stdio.
 
-Tests: `uv run pytest` on Windows. They cannot run in the Linux VM that the Claude desktop bridge uses, which has neither pytest nor pydantic.
+Tests: `uv run --with pytest pytest` on Windows (pytest is only in the `dev` extra, so a plain `uv run pytest` does not find it). They cannot run in the Linux VM that the Claude desktop bridge uses, which has neither pytest nor pydantic.
 
 **A code change is not live until the MCP server process restarts**, which means restarting the client that spawned it. Every past round of confusion in this project came from testing against a server still running the old code. Verify a fix by creating a throwaway event, reading it back, and deleting it, rather than assuming the restart took.
 
